@@ -248,4 +248,17 @@ describe EventMachine::HttpRequest do
       }
     }
   end
+
+  it "should respect manually-passed host address" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.1.1.1:8080/').get :host => '127.0.0.1'
+
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 200
+        http.response.should match(/Hello/)
+        EventMachine.stop
+      }
+    }
+  end
 end

@@ -45,6 +45,9 @@ module EventMachine
     #     Called for each response body chunk (you may assume HTTP 200
     #     OK then)
     #
+    #   host: String
+    #     Manually specify TCP connect host address, independent of
+    #     Host: header
 
     def get  options = {};    send_request(:get,  options);    end
     def post options = {};    send_request(:post, options);    end
@@ -56,7 +59,8 @@ module EventMachine
 
       method = method.to_s.upcase
       begin
-       EventMachine.connect(@uri.host, @uri.port, EventMachine::HttpClient) { |c|
+       host = options[:host] || @uri.host
+       EventMachine.connect(host, @uri.port, EventMachine::HttpClient) { |c|
           c.uri = @uri
           c.method = method
           c.options = options
