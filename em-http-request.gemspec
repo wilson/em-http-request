@@ -30,6 +30,7 @@ spec = Gem::Specification.new do |s|
     "lib/em-http/client.rb",
     "lib/em-http/multi.rb",
     "lib/em-http/request.rb",
+    "lib/em-http/decoders.rb",
     "test/helper.rb",
     "test/stallion.rb",
     "test/test_multi.rb",
