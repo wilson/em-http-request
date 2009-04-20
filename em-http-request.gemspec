@@ -28,6 +28,7 @@ spec = Gem::Specification.new do |s|
     "ext/http11_client/http11_parser.rl",
     "lib/em-http.rb",
     "lib/em-http/client.rb",
+    "lib/em-http/decoders.rb",
     "lib/em-http/multi.rb",
     "lib/em-http/request.rb",
     "test/helper.rb",
