@@ -1,5 +1,6 @@
 require 'test/helper'
 require 'test/stallion'
+require 'gserver'
 
 describe EventMachine::HttpRequest do
 
@@ -49,6 +50,24 @@ describe EventMachine::HttpRequest do
       http.callback {
         http.response_header.status.should == 200
         http.response.should match(/Hello/)
+        EventMachine.stop
+      }
+    }
+  end
+
+  it "should be able to parse responses using only LF instead of CRLF and responses with no content-length (hacker news)" do
+    EventMachine.run {
+      EventMachine.start_server('127.0.0.1', 8081, Module.new {
+        def post_init; send_data "HTTP/1.1 200 OK\n\nblah"; close_connection_after_writing; end
+      })
+
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8081/').get
+
+      http.errback { failed }
+      http.callback { 
+        http.response_header.status.should == 200
+        http.response.should match(/blah/)
+        
         EventMachine.stop
       }
     }
