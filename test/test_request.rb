@@ -145,6 +145,20 @@ describe EventMachine::HttpRequest do
       }
     }
   end
+  
+  it "should perform successfull POST with Ruby Hash/Array as params and with the correct content length" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/echo_content_length').post :body => {"key1" => "data1"}
+
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 200
+        
+        http.response.to_i.should == 10
+        EventMachine.stop
+      }
+    }
+  end
 
   it "should perform successfull GET with custom header" do
     EventMachine.run {
@@ -277,16 +291,16 @@ describe EventMachine::HttpRequest do
     }
   end
 
-  it "should respect manually-passed host address" do
+  it "should initiate SSL/TLS on HTTPS connections" do
     EventMachine.run {
-      http = EventMachine::HttpRequest.new('http://127.1.1.1:8080/').get :host => '127.0.0.1'
+      http = EventMachine::HttpRequest.new('https://mail.google.com:443/mail/').get
 
       http.errback { failed }
       http.callback {
-        http.response_header.status.should == 200
-        http.response.should match(/Hello/)
+        http.response_header.status.should == 302
         EventMachine.stop
       }
     }
   end
+
 end

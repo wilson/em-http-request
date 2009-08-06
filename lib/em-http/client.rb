@@ -1,4 +1,3 @@
-# -*- coding: undecided -*-
 # #--
 # Copyright (C)2008 Ilya Grigorik
 #
@@ -171,6 +170,9 @@ module EventMachine
 
     # start HTTP request once we establish connection to host
     def connection_completed
+      ssl = @options[:tls] || @options[:ssl] || {}
+      start_tls(ssl) if @uri.scheme == "https" or @uri.port == 443
+
       send_request_header
       send_request_body
     end
@@ -191,10 +193,18 @@ module EventMachine
       unbind
     end
 
+    def normalize_body
+      if @options[:body].is_a? Hash
+        @options[:body].to_params
+      else
+        @options[:body]
+      end
+    end
+
     def send_request_header
       query   = @options[:query]
       head    = @options[:head] ? munge_header_keys(@options[:head]) : {}
-      body    = @options[:body]
+      body    = normalize_body
 
       # Set the Host header if it hasn't been specified already
       head['host'] ||= encode_host
@@ -220,11 +230,7 @@ module EventMachine
 
     def send_request_body
       return unless @options[:body]
-      if @options[:body].is_a? Hash
-        body = @options[:body].to_params
-      else
-        body = @options[:body]
-      end
+      body = normalize_body
       send_data body
     end
 
