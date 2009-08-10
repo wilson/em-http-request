@@ -260,10 +260,11 @@ describe EventMachine::HttpRequest do
   it "should optionally pass the response body progressively" do
     EventMachine.run {
       body = ''
-      on_body = lambda { |chunk| body += chunk }
-      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').get :on_response => on_body
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').get 
 
       http.errback { failed }
+      http.stream { |chunk| body += chunk }
+
       http.callback {
         http.response_header.status.should == 200
         http.response.should == ''
@@ -276,11 +277,11 @@ describe EventMachine::HttpRequest do
   it "should optionally pass the deflate-encoded response body progressively" do
     EventMachine.run {
       body = ''
-      on_body = lambda { |chunk| body += chunk }
-      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/deflate').get :head => {"accept-encoding" => "deflate, compressed"},
-      :on_response => on_body
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/deflate').get :head => {"accept-encoding" => "deflate, compressed"}
 
       http.errback { failed }
+      http.stream { |chunk| body += chunk }
+
       http.callback {
         http.response_header.status.should == 200
         http.response_header["CONTENT_ENCODING"].should == "deflate"
@@ -298,6 +299,43 @@ describe EventMachine::HttpRequest do
       http.errback { failed }
       http.callback {
         http.response_header.status.should == 302
+        EventMachine.stop
+      }
+    }
+  end
+
+  it "should accept & return cookie header to user" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/set_cookie').get
+
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 200
+        http.response_header.cookie.should == "id=1; expires=Tue, 09-Aug-2011 17:53:39 GMT; path=/;"
+        EventMachine.stop
+      }
+    }
+  end
+
+  it "should pass cookie header to server from string" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/echo_cookie').get :head => {'cookie' => 'id=2;'}
+
+      http.errback { failed }
+      http.callback {
+        http.response.should == "id=2;"
+        EventMachine.stop
+      }
+    }
+  end
+
+  it "should pass cookie header to server from Hash" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/echo_cookie').get :head => {'cookie' => {'id' => 2}}
+
+      http.errback { failed }
+      http.callback {
+        http.response.should == "id=2;"
         EventMachine.stop
       }
     }
