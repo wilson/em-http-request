@@ -11,7 +11,7 @@ spec = Gem::Specification.new do |s|
   s.add_dependency('eventmachine', '>= 0.12.2')
   s.extensions = ["ext/buffer/extconf.rb" , "ext/http11_client/extconf.rb"]
   s.rubyforge_project = "em-http-request" 
-
+  
   # ruby -rpp -e' pp `git ls-files`.split("\n") '
   s.files = [
  ".autotest",
