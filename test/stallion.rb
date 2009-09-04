@@ -83,6 +83,9 @@ Stallion.saddle :spec do |stable|
     elsif stable.request.path_info == '/echo_content_length'
       stable.response.write stable.request.content_length
 
+    elsif stable.request.head?
+      stable.response.status = 200
+
     elsif stable.request.post?
       stable.response.write stable.request.body.read
 
@@ -131,7 +134,11 @@ Stallion.saddle :spec do |stable|
 end
 
 Thread.new do
-  Stallion.run :Host => '127.0.0.1', :Port => 8080
+  begin
+    Stallion.run :Host => '127.0.0.1', :Port => 8080  
+  rescue Exception => e
+    print e
+  end
 end
 
-sleep(2)
+sleep(1)
