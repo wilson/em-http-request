@@ -20,6 +20,16 @@ module EventMachine
 
     # The status code (as a string!)
     attr_accessor :http_status
+    
+    # E-Tag
+    def etag
+      self["ETag"]
+    end
+    
+    def last_modified
+      time = self["Last-Modified"]
+      Time.parse(time) if time
+    end
 
     # HTTP response status as an integer
     def status
@@ -98,12 +108,16 @@ module EventMachine
     end
 
     def encode_query(path, query)
-      return path unless query
-      if query.kind_of? String
-        return "#{path}?#{query}"
+      encoded_query = if query.kind_of?(Hash)
+        query.map { |k, v| encode_param(k, v) }.join('&')
       else
-        return path + "?" + query.map { |k, v| encode_param(k, v) }.join('&')
+        query.to_s
       end
+      if !@uri.query.to_s.empty?
+        encoded_query = [encoded_query, @uri.query].reject {|part| part.empty?}.join("&")
+      end
+      return path if encoded_query.to_s.empty?
+      "#{path}?#{encoded_query}"
     end
 
     # URL encodes query parameters:
@@ -186,7 +200,7 @@ module EventMachine
       send_request_header
       send_request_body
     end
-
+    
     # request is done, invoke the callback
     def on_request_complete
       begin
@@ -196,11 +210,14 @@ module EventMachine
       end
       unbind
     end
-
+    
     # request failed, invoke errback
-    def on_error(msg)
+    def on_error(msg, dns_error = false)
       @errors = msg
-      unbind
+      
+      # no connection signature on DNS failures
+      # fail the connection directly
+      dns_error == true ? fail : unbind
     end
 
     # assign a stream processing block
@@ -281,7 +298,13 @@ module EventMachine
     end
 
     def unbind
-      (@state == :finished) ? succeed(self) : fail
+      if (@state == :finished) || 
+         (@state == :body && @method == "HEAD") ||
+         (@state == :body && @response_header.content_length == 0)
+        succeed(self) 
+      else
+        fail
+      end
       close_connection
     end
 
@@ -343,7 +366,7 @@ module EventMachine
         @state = :chunk_header
       else
         @state = :body
-        @bytes_remaining = @response_header.content_length
+        @bytes_remaining = @response_header.content_length if @response_header.content_length > 0
       end
 
       if @inflate.include?(response_header[CONTENT_ENCODING]) &&

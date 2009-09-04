@@ -50,13 +50,14 @@ module EventMachine
     #     Host: header
 
     def get  options = {};    send_request(:get,  options);    end
+    def head options = {};    send_request(:head, options);    end
     def post options = {};    send_request(:post, options);    end
 
     protected
 
     def send_request(method, options)
       raise ArgumentError, "invalid request path" unless /^\// === @uri.path
-
+      
       method = method.to_s.upcase
       begin
        host = options[:host] || @uri.host
@@ -69,7 +70,7 @@ module EventMachine
       rescue RuntimeError => e 
         raise e unless e.message == "no connection"
         conn = EventMachine::HttpClient.new("")
-        conn.on_error("no connection")
+        conn.on_error("no connection", true)
         conn
       end
     end
