@@ -61,6 +61,8 @@ module EventMachine
       method = method.to_s.upcase
       begin
        host = options[:host] || @uri.host
+       raise ArgumentError, "invalid host" unless host
+       raise ArgumentError, "invalid port" unless @uri.port
        EventMachine.connect(host, @uri.port, EventMachine::HttpClient) { |c|
           c.uri = @uri
           c.method = method

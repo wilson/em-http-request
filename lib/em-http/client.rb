@@ -333,7 +333,6 @@ module EventMachine
 
     def parse_header(header)
       return false if @data.empty?
-
       begin
         @parser_nbytes = @parser.execute(header, @data.to_str, @parser_nbytes)
       rescue EventMachine::HttpClientParserError
