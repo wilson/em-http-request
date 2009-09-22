@@ -367,7 +367,7 @@ module EventMachine
 
       if @response_header.chunked_encoding?
         @state = :chunk_header
-      else
+      elsif @response_header.content_length
         if @response_header.content_length > 0
           @state = :body
           @bytes_remaining = @response_header.content_length 
@@ -375,6 +375,10 @@ module EventMachine
           @state = :finished
           on_request_complete
         end
+      else
+        @state = :invalid
+        on_error "no HTTP response"
+        return false
       end
 
       if @inflate.include?(response_header[CONTENT_ENCODING]) &&
