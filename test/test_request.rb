@@ -354,5 +354,33 @@ describe EventMachine::HttpRequest do
       }
     }
   end
+
+  context "when talking to a HTTP/1.0 server" do
+    before :all do
+      @server = Thread.new {
+        s = TCPServer.new(8081)
+        while c = s.accept
+          c.print "HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\nHello World"
+          c.close
+        end
+      }
+      Thread.pass
+    end
+    after :all do
+      @server.kill
+    end
+
+    it "should get the document" do
+      EventMachine.run {
+        http = EventMachine::HttpRequest.new('http://127.0.0.1:8081/').get
+        
+        http.errback { failed }
+        http.callback {
+          http.response.should == "Hello World"
+          EventMachine.stop
+        }
+      }
+    end
+  end
   
 end
