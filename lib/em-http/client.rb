@@ -38,7 +38,8 @@ module EventMachine
 
     # Length of content as an integer, or nil if chunked/unspecified
     def content_length
-      Integer(self[HttpClient::CONTENT_LENGTH]) rescue nil
+      val = self[HttpClient::CONTENT_LENGTH]
+      val and Integer(val) rescue nil
     end
 
     # Cookie header from the server
@@ -202,13 +203,13 @@ module EventMachine
     end
     
     # request is done, invoke the callback
-    def on_request_complete
+    def on_request_complete(unbound = false)
       begin
         @content_decoder.finalize! if @content_decoder
       rescue HttpDecoders::DecoderError
         on_error "Content-decoder error"
       end
-      unbind
+      unbind  unless unbound
     end
     
     # request failed, invoke errback
@@ -298,6 +299,11 @@ module EventMachine
     end
 
     def unbind
+      if @state == :body and @bytes_remaining.nil?
+        on_request_complete(true)
+        @state = :finished
+      end
+
       if @state == :finished
         succeed(self) 
       else
