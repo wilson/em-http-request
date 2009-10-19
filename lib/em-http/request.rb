@@ -67,7 +67,11 @@ module EventMachine
           c.uri = @uri
           c.method = method
           c.options = options
-          c.comm_inactivity_timeout = options[:timeout] || 5
+          if options.has_key?(:timeout) && options[:timeout]
+            c.comm_inactivity_timeout = options[:timeout]
+          elsif options.has_key?(:timeout)
+            c.comm_inactivity_timeout = 5
+          end
         }
       rescue RuntimeError => e 
         raise e unless e.message == "no connection"
