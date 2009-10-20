@@ -298,7 +298,7 @@ module EventMachine
     end
 
     def unbind
-      if @state == :finished
+      if @state == :finished || (@state == :body && @bytes_remaining.nil?)
         succeed(self) 
       else
         fail(self)
@@ -372,8 +372,8 @@ module EventMachine
           @state = :body
           @bytes_remaining = @response_header.content_length 
         else
-          @state = :finished
-          on_request_complete
+          @state = :body
+          @bytes_remaining = nil
         end
       else
         @state = :invalid
