@@ -72,10 +72,10 @@ module EventMachine
           c.options = options
           if options.has_key?(:timeout) && options[:timeout]
             c.comm_inactivity_timeout = options[:timeout]
-            c.pending_connect_timeout = options[:timeout]
+            c.pending_connect_timeout = options[:timeout] if c.respond_to?(:pending_connect_timeout)
           elsif options.has_key?(:timeout)
             c.comm_inactivity_timeout = 5
-            c.pending_connect_timeout = 5
+            c.pending_connect_timeout = 5 if c.respond_to?(:pending_connect_timeout)
           end
         }
       rescue RuntimeError => e 
