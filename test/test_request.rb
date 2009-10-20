@@ -11,7 +11,7 @@ describe EventMachine::HttpRequest do
   
   it "should fail GET on DNS timeout" do
     EventMachine.run {
-      http = EventMachine::HttpRequest.new('http://127.1.1.1/').get
+      http = EventMachine::HttpRequest.new('http://127.1.1.1/').get :timeout => 1
       http.callback { failed }
       http.errback {
         http.response_header.status.should == 0
@@ -22,7 +22,7 @@ describe EventMachine::HttpRequest do
 
   it "should fail GET on invalid host" do
     EventMachine.run {
-      http = EventMachine::HttpRequest.new('http://google1.com/').get
+      http = EventMachine::HttpRequest.new('http://google1.com/').get :timeout => 1
       http.callback { failed }
       http.errback {
         http.response_header.status.should == 0

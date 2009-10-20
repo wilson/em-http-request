@@ -1,4 +1,5 @@
 require 'zlib'
+require 'stringio'
 
 ##
 # Provides a unified callback interface to decompression libraries.
@@ -115,5 +116,3 @@ module EventMachine::HttpDecoders
   DECODERS = [Deflate, GZip]
 
 end
-
-    
