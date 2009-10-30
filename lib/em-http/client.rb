@@ -38,7 +38,8 @@ module EventMachine
 
     # Length of content as an integer, or nil if chunked/unspecified
     def content_length
-      Integer(self[HttpClient::CONTENT_LENGTH]) rescue nil
+      @content_length ||= ((s = self[HttpClient::CONTENT_LENGTH]) &&
+                           (s =~ /^(\d+)$/)) ? $1.to_i : nil
     end
 
     # Cookie header from the server
@@ -57,6 +58,10 @@ module EventMachine
 
     def compressed?
       /gzip|compressed|deflate/i === self[HttpClient::CONTENT_ENCODING]
+    end
+
+    def location
+      self[HttpClient::LOCATION]
     end
   end
 
@@ -100,7 +105,7 @@ module EventMachine
     # you include port 80 then further redirects will tack on the :80 which is
     # annoying.
     def encode_host
-      @uri.host + (@uri.port.to_i != 80 ? ":#{@uri.port}" : "")
+      @uri.host + (@uri.port != 80 ? ":#{@uri.port}" : "")
     end
 
     def encode_request(method, path, query)
@@ -186,7 +191,6 @@ module EventMachine
       @state = :response_header
       @parser_nbytes = 0
       @response = ''
-      @inflate = []
       @errors = ''
       @content_decoder = nil
       @stream = nil
@@ -217,7 +221,7 @@ module EventMachine
       
       # no connection signature on DNS failures
       # fail the connection directly
-      dns_error == true ? fail : unbind
+      dns_error == true ? fail(self) : unbind
     end
 
     # assign a stream processing block
@@ -247,14 +251,14 @@ module EventMachine
       # Set the User-Agent if it hasn't been specified
       head['user-agent'] ||= "EventMachine HttpClient"
 
-      # Set auto-inflate flags
-      if head['accept-encoding']
-        @inflate = head['accept-encoding'].split(',').map {|t| t.strip}
-      end
-
       # Set the cookie header if provided
       if cookie = head.delete('cookie')
         head['cookie'] = encode_cookie(cookie)
+      end
+
+      # Set content-type header if missing and body is a Ruby hash
+      if not head['content-type'] and options[:body].is_a? Hash
+        head['content-type'] = "application/x-www-form-urlencoded"
       end
 
       # Build the request
@@ -298,7 +302,7 @@ module EventMachine
     end
 
     def unbind
-      if @state == :finished
+      if @state == :finished || (@state == :body && @bytes_remaining.nil?)
         succeed(self) 
       else
         fail(self)
@@ -360,6 +364,20 @@ module EventMachine
         return false
       end
 
+      # correct location header - some servers will incorrectly give a relative URI
+      if @response_header.location
+        begin
+          location = URI.parse @response_header.location
+          if location.relative?
+            location = (@uri.merge location).to_s
+            @response_header[LOCATION] = location
+          end
+        rescue
+          on_error "Location header format error"
+          return false
+        end
+      end
+
       # shortcircuit on HEAD requests 
       if @method == "HEAD"
         @state = :finished
@@ -368,25 +386,22 @@ module EventMachine
 
       if @response_header.chunked_encoding?
         @state = :chunk_header
+      elsif @response_header.content_length
+        @state = :body
+        @bytes_remaining = @response_header.content_length 
       else
-        if @response_header.content_length > 0
-          @state = :body
-          @bytes_remaining = @response_header.content_length 
-        else
-          @state = :finished
-          on_request_complete
-        end
+        @state = :body
+        @bytes_remaining = nil
       end
 
-      if @inflate.include?(response_header[CONTENT_ENCODING]) &&
-          decoder_class = HttpDecoders.decoder_for_encoding(response_header[CONTENT_ENCODING])
+      if decoder_class = HttpDecoders.decoder_for_encoding(response_header[CONTENT_ENCODING])
         begin
           @content_decoder = decoder_class.new do |s| on_decoded_body_data(s) end
         rescue HttpDecoders::DecoderError
           on_error "Content-decoder error"
         end
       end
-
+      
       true
     end
 

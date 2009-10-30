@@ -1,5 +1,5 @@
-require 'uri'
 require 'base64'
+require 'addressable/uri'
 
 module EventMachine
 
@@ -27,7 +27,7 @@ module EventMachine
 
     def initialize(host, headers = {})
       @headers = headers
-      @uri = host.kind_of?(URI) ? host : URI::parse(host)
+      @uri = host.kind_of?(Addressable::URI) ? host : Addressable::URI::parse(host)
     end
 
     # Send an HTTP request and consume the response. Supported options:
@@ -57,7 +57,13 @@ module EventMachine
 
     def send_request(method, options)
       raise ArgumentError, "invalid request path" unless /^\// === @uri.path
-      
+
+      # default connect & inactivity timeouts
+      options[:timeout] = 5 if not options[:timeout]
+
+      # Make sure the port is set as Addressable::URI doesn't set the
+      # port if it isn't there.
+      @uri.port = @uri.port ? @uri.port : 80
       method = method.to_s.upcase
       begin
        host = options[:host] || @uri.host
@@ -65,7 +71,8 @@ module EventMachine
           c.uri = @uri
           c.method = method
           c.options = options
-          c.comm_inactivity_timeout = options[:timeout] || 5
+          c.comm_inactivity_timeout = options[:timeout]
+          c.pending_connect_timeout = options[:timeout]
         }
       rescue RuntimeError => e 
         raise e unless e.message == "no connection"

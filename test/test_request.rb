@@ -1,5 +1,6 @@
 require 'test/helper'
 require 'test/stallion'
+require 'test/stub_server'
  
 describe EventMachine::HttpRequest do
 
@@ -10,7 +11,7 @@ describe EventMachine::HttpRequest do
   
   it "should fail GET on DNS timeout" do
     EventMachine.run {
-      http = EventMachine::HttpRequest.new('http://127.1.1.1/').get
+      http = EventMachine::HttpRequest.new('http://127.1.1.1/').get :timeout => 1
       http.callback { failed }
       http.errback {
         http.response_header.status.should == 0
@@ -21,7 +22,7 @@ describe EventMachine::HttpRequest do
 
   it "should fail GET on invalid host" do
     EventMachine.run {
-      http = EventMachine::HttpRequest.new('http://google1.com/').get
+      http = EventMachine::HttpRequest.new('http://somethinglocal/').get :timeout => 1
       http.callback { failed }
       http.errback {
         http.response_header.status.should == 0
@@ -354,5 +355,81 @@ describe EventMachine::HttpRequest do
       }
     }
   end
-  
+
+  context "when talking to a stub HTTP/1.0 server" do
+    it "should get the body without Content-Length" do
+      EventMachine.run {
+        @s = StubServer.new("HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nFoo")
+
+        http = EventMachine::HttpRequest.new('http://127.0.0.1:8081/').get
+        http.errback { failed }
+        http.callback {
+          http.response.should match(/Foo/)
+          http.response_header['CONTENT_LENGTH'].should_not == 0
+
+          @s.stop
+          EventMachine.stop
+        }
+      }
+    end
+
+    it "should work with \\n instead of \\r\\n" do
+      EventMachine.run {
+        @s = StubServer.new("HTTP/1.0 200 OK\nContent-Type: text/plain\nContent-Length: 3\nConnection: close\n\nFoo")
+
+        http = EventMachine::HttpRequest.new('http://127.0.0.1:8081/').get
+        http.errback { failed }
+        http.callback {
+          http.response_header.status.should == 200
+          http.response_header['CONTENT_TYPE'].should == 'text/plain'
+          http.response.should match(/Foo/)
+
+          @s.stop
+          EventMachine.stop
+        }
+      }
+    end
+  end
+
+  context "body content-type encoding" do
+    it "should not set content type on string in body" do
+      EventMachine.run {
+        http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/echo_content_type').post :body => "data"
+
+        http.errback { failed }
+        http.callback {
+          http.response_header.status.should == 200
+          http.response.should be_empty
+          EventMachine.stop
+        }
+      }
+    end
+
+    it "should set content-type automatically when passed a ruby hash/array for body" do
+      EventMachine.run {
+        http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/echo_content_type').post :body => {:a => :b}
+
+        http.errback { failed }
+        http.callback {
+          http.response_header.status.should == 200
+          http.response.should match("application/x-www-form-urlencoded")
+          EventMachine.stop
+        }
+      }
+    end
+
+     it "should not override content-type when passing in ruby hash/array for body" do
+      EventMachine.run {
+        http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/echo_content_type').post({
+            :body => {:a => :b}, :head => {'content-type' => 'text'}})
+
+        http.errback { failed }
+        http.callback {
+          http.response_header.status.should == 200
+          http.response.should match("text")
+          EventMachine.stop
+        }
+      }
+    end
+  end
 end
