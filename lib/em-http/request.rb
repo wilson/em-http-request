@@ -48,6 +48,12 @@ module EventMachine
     #   host: String
     #     Manually specify TCP connect host address, independent of
     #     Host: header
+    #
+    #   max_bytes: Integer
+    #     Explictly specify a maximum number of bytes that this connection may receive before shutting down.
+    #     Default : none.
+    #
+    
 
     def get  options = {};    send_request(:get,  options);    end
     def head options = {};    send_request(:head, options);    end

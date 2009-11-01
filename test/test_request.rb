@@ -444,4 +444,15 @@ describe EventMachine::HttpRequest do
         }
       }
   end
+
+  it "should return and error if the response side exceeds the :max_bytes option" do
+     EventMachine.run {
+        http = EventMachine::HttpRequest.new("http://127.0.0.1:8080/").get(:max_bytes => 3)
+        http.errback { |http|
+          http.errors.should match /Bytes received exceeds limit/
+          EventMachine.stop
+        }
+        http.callback { failed }
+      }
+  end
 end

@@ -199,6 +199,7 @@ module EventMachine
     # start HTTP request once we establish connection to host
     def connection_completed
       ssl = @options[:tls] || @options[:ssl] || {}
+      @bytes_received = 0
       start_tls(ssl) if @uri.scheme == "https" #or @uri.port == 443 # A user might not want https even on port 443.
 
       send_request_header
@@ -276,8 +277,13 @@ module EventMachine
     end
 
     def receive_data(data)
-      @data << data
-      dispatch
+      @bytes_received += data.size
+      if !@options[:max_bytes].nil? and @options[:max_bytes] > @bytes_received
+        @data << data
+        dispatch
+      else
+        on_error("Bytes received exceeds limit (#{@bytes_received} vs. #{ @options[:max_bytes]})")
+      end
     end
 
     # Called when part of the body has been read
@@ -302,7 +308,7 @@ module EventMachine
     end
 
     def unbind
-      if @state == :finished || (@state == :body && @bytes_remaining.nil?)
+      if @state == :finished || (@state == :body && @bytes_remaining.nil? && @bytes_received < @options[:max_bytes])
         succeed(self) 
       else
         fail(self)
