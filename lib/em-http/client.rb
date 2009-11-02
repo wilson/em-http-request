@@ -278,7 +278,7 @@ module EventMachine
 
     def receive_data(data)
       @bytes_received += data.size
-      if !@options[:max_bytes].nil? and @options[:max_bytes] > @bytes_received
+      if @options[:max_bytes].nil? or @options[:max_bytes] > @bytes_received
         @data << data
         dispatch
       else
