@@ -198,6 +198,12 @@ module EventMachine
 
     # start HTTP request once we establish connection to host
     def connection_completed
+      if @options[:max_connection_duration] 
+        EM.add_timer(@options[:max_connection_duration]) {
+          @aborted = true
+          on_error("Max Connection Duration Exceeded (#{@options[:max_connection_duration]}s.)")
+        }
+      end
       ssl = @options[:tls] || @options[:ssl] || {}
       @bytes_received = 0
       start_tls(ssl) if @uri.scheme == "https" #or @uri.port == 443 # A user might not want https even on port 443.
@@ -308,7 +314,12 @@ module EventMachine
     end
 
     def unbind
-      if @state == :finished || (@state == :body && @bytes_remaining.nil? && @bytes_received < @options[:max_bytes])
+      if @state == :finished || (
+          @state == :body && 
+          @bytes_remaining.nil? && 
+          (!@options[:max_bytes] or @bytes_received < @options[:max_bytes]) &&
+          (!@options[:max_connection_duration] or !@aborted)
+        )
         succeed(self) 
       else
         fail(self)

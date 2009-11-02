@@ -53,6 +53,10 @@ module EventMachine
     #     Explictly specify a maximum number of bytes that this connection may receive before shutting down.
     #     Default : none.
     #
+    #   max_connection_duration: Integer
+    #     Explictly specify a maximum number of second for the connection. This is useful to avoid dealing with never ending connections (AtomStream-like)
+    #     Default : none.
+    #
     
 
     def get  options = {};    send_request(:get,  options);    end

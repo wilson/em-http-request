@@ -445,7 +445,7 @@ describe EventMachine::HttpRequest do
       }
   end
 
-  it "should return and error if the response side exceeds the :max_bytes option" do
+  it "should return an error if the response size exceeds the :max_bytes option" do
      EventMachine.run {
         http = EventMachine::HttpRequest.new("http://127.0.0.1:8080/").get(:max_bytes => 3)
         http.errback { |http|
@@ -455,4 +455,16 @@ describe EventMachine::HttpRequest do
         http.callback { failed }
       }
   end
+
+  it "should return an error if the connection duration exceeds the :max_connection_duration option" do
+     EventMachine.run {
+        http = EventMachine::HttpRequest.new("http://updates.sixapart.com/atom-stream.xml").get(:max_connection_duration => 3)
+        http.errback { |http|
+          http.errors.should match /Max Connection Duration Exceeded/
+          EventMachine.stop
+        }
+        http.callback { failed }
+      }
+  end
+
 end
