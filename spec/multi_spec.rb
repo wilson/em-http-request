@@ -1,5 +1,5 @@
-require 'test/helper'
-require 'test/stallion'
+require 'spec/helper'
+require 'spec/stallion'
 
 describe EventMachine::MultiRequest do
 
@@ -11,7 +11,7 @@ describe EventMachine::MultiRequest do
       
       # add multiple requests to the multi-handler
       multi.add(EventMachine::HttpRequest.new('http://127.0.0.1:8080/').get(:query => {:q => 'test'}))
-      multi.add(EventMachine::HttpRequest.new('http://0.0.0.0/').get(:timeout => 1))
+      multi.add(EventMachine::HttpRequest.new('http://0.0.0.0:8083/').get(:timeout => 1))
       
       multi.callback  {
         # verify successfull request

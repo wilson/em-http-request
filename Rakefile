@@ -35,7 +35,7 @@ task :ragel do
 end
 
 task :spec do
-  sh 'spec -c test/test_*.rb'
+	sh 'spec spec/*_spec.rb'
 end
 
 def make(makedir)
@@ -96,6 +96,7 @@ begin
     gemspec.add_dependency('eventmachine', '>= 0.12.9')
     gemspec.add_dependency('addressable', '>= 2.0.0')
     gemspec.rubyforge_project = "em-http-request"
+    gemspec.files = FileList[`git ls-files`.split]
   end
   
   Jeweler::GemcutterTasks.new
