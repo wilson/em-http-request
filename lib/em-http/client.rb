@@ -199,6 +199,8 @@ module EventMachine
       @content_decoder = nil
       @stream = nil
       @state = :response_header
+      @bytes_received = 0
+      @options = {}
     end
 
     # start HTTP request once we establish connection to host
@@ -219,7 +221,6 @@ module EventMachine
             on_error("Max Connection Duration Exceeded (#{@options[:max_connection_duration]}s.)")
           }
         end
-        @bytes_received = 0
         @state = :response_header
                       
         ssl = @options[:tls] || @options[:ssl] || {}

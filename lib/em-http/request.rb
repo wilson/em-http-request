@@ -92,7 +92,7 @@ module EventMachine
        EventMachine.connect(@host_to_connect, @port_to_connect, EventMachine::HttpClient) { |c|
           c.uri = @uri
           c.method = @method
-          c.options = @options
+          c.options = @options || {}
           if options.has_key?(:timeout) && options[:timeout]
             c.comm_inactivity_timeout = options[:timeout]
             c.pending_connect_timeout = options[:timeout] if c.respond_to?(:pending_connect_timeout)
