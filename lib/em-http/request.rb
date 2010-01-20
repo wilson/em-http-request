@@ -9,7 +9,6 @@ module EventMachine
   #
   # == Example
   #
-  #
   #  EventMachine.run {
   #    http = EventMachine::HttpRequest.new('http://127.0.0.1/').get :query => {'keyname' => 'value'}
   #
@@ -24,6 +23,8 @@ module EventMachine
   #
 
   class HttpRequest
+    
+    attr_reader :options, :method
 
     def initialize(host, headers = {})
       @headers = headers
@@ -45,44 +46,53 @@ module EventMachine
     #     Called for each response body chunk (you may assume HTTP 200
     #     OK then)
     #
-    #   host: String
-    #     Manually specify TCP connect host address, independent of
-    #     Host: header
-    #
-    #   max_bytes: Integer
-    #     Explictly specify a maximum number of bytes that this connection may receive before shutting down.
-    #     Default : none.
-    #
-    #   max_connection_duration: Integer
-    #     Explictly specify a maximum number of second for the connection. This is useful to avoid dealing with never ending connections (AtomStream-like)
-    #     Default : none.
-    #
-    
-
-    def get  options = {};    send_request(:get,  options);    end
-    def head options = {};    send_request(:head, options);    end
-    def post options = {};    send_request(:post, options);    end
+                                   
+    def get    options = {}, &blk;  setup_request(:get,  options, &blk);    end
+    def head   options = {}, &blk;  setup_request(:head, options, &blk);    end
+    def delete options = {}, &blk;  setup_request(:delete, options, &blk);  end
+    def put    options = {}, &blk;  setup_request(:put, options, &blk);     end
+    def post   options = {}, &blk;  setup_request(:post, options, &blk);    end
 
     protected
 
-    def send_request(method, options)
+    def setup_request(method, options, &blk)
       raise ArgumentError, "invalid request path" unless /^\// === @uri.path
+      @options = options
+      
+      if proxy = options[:proxy]
+        @host_to_connect = proxy[:host]
+        @port_to_connect = proxy[:port]
+      else
+        @host_to_connect = options[:host] || @uri.host
+        @port_to_connect = options[:port] || @uri.port
+      end                                      
+      
+      # default connect & inactivity timeouts        
+      @options[:timeout] = 10 if not @options[:timeout]  
 
-      # default connect & inactivity timeouts
-      options[:timeout] = 5 if not options[:timeout]
-
-      # Make sure the port is set as Addressable::URI doesn't set the
-      # port if it isn't there.
-      @uri.port = @uri.port ? @uri.port : 80
-      method = method.to_s.upcase
+      # Make sure the ports are set as Addressable::URI doesn't
+      # set the port if it isn't there
+      if @uri.scheme == "https"
+        @uri.port ||= 443
+        @port_to_connect ||= 443
+      else
+        @uri.port ||= 80
+        @port_to_connect ||= 80
+      end
+      
+      @method = method.to_s.upcase
+      send_request(&blk)
+    end
+    
+    def send_request(&blk)
       begin
-       host = options[:host] || @uri.host
-       raise ArgumentError, "invalid host" unless host
-       raise ArgumentError, "invalid port" unless @uri.port
-       EventMachine.connect(host, @uri.port, EventMachine::HttpClient) { |c|
+      raise ArgumentError, "invalid host" unless @host_to_connect
+      raise ArgumentError, "invalid port" unless @port_to_connect
+               
+       EventMachine.connect(@host_to_connect, @port_to_connect, EventMachine::HttpClient) { |c|
           c.uri = @uri
-          c.method = method
-          c.options = options
+          c.method = @method
+          c.options = @options
           if options.has_key?(:timeout) && options[:timeout]
             c.comm_inactivity_timeout = options[:timeout]
             c.pending_connect_timeout = options[:timeout] if c.respond_to?(:pending_connect_timeout)
@@ -90,11 +100,11 @@ module EventMachine
             c.comm_inactivity_timeout = 5
             c.pending_connect_timeout = 5 if c.respond_to?(:pending_connect_timeout)
           end
+          blk.call(c) unless blk.nil?
         }
-      rescue RuntimeError => e 
-        raise e unless e.message == "no connection"
+      rescue EventMachine::ConnectionError => e
         conn = EventMachine::HttpClient.new("")
-        conn.on_error("no connection", true)
+        conn.on_error(e.message, true)
         conn
       end
     end

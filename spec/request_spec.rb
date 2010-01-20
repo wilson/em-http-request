@@ -1,14 +1,14 @@
-require 'test/helper'
-require 'test/stallion'
-require 'test/stub_server'
- 
+require 'spec/helper'
+require 'spec/stallion'
+require 'spec/stub_server'
+
 describe EventMachine::HttpRequest do
 
   def failed
     EventMachine.stop
     fail
   end
-  
+
   it "should fail GET on DNS timeout" do
     EventMachine.run {
       http = EventMachine::HttpRequest.new('http://127.1.1.1/').get :timeout => 1
@@ -26,7 +26,7 @@ describe EventMachine::HttpRequest do
       http.callback { failed }
       http.errback {
         http.response_header.status.should == 0
-        http.errors.should match(/no connection/)
+        http.errors.should match(/unable to resolve server address/)
         EventMachine.stop
       }
     }
@@ -54,7 +54,7 @@ describe EventMachine::HttpRequest do
       }
     }
   end
-  
+
   it "should perform successfull GET with a URI passed as argument" do
     EventMachine.run {
       uri = URI.parse('http://127.0.0.1:8080/')
@@ -66,7 +66,7 @@ describe EventMachine::HttpRequest do
         http.response.should match(/Hello/)
         EventMachine.stop
       }
-    }    
+    }
   end
 
   it "should perform successfull HEAD with a URI passed as argument" do
@@ -80,7 +80,22 @@ describe EventMachine::HttpRequest do
         http.response.should == ""
         EventMachine.stop
       }
-    }    
+    }
+  end
+
+  # should be no different than a GET
+  it "should perform successfull DELETE with a URI passed as argument" do
+    EventMachine.run {
+      uri = URI.parse('http://127.0.0.1:8080/')
+      http = EventMachine::HttpRequest.new(uri).delete
+
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 200
+        http.response.should == ""
+        EventMachine.stop
+      }
+    }
   end
 
   it "should return 404 on invalid path" do
@@ -88,7 +103,7 @@ describe EventMachine::HttpRequest do
       http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/fail').get
 
       http.errback { failed }
-      http.callback { 
+      http.callback {
         http.response_header.status.should == 404
         EventMachine.stop
       }
@@ -134,6 +149,20 @@ describe EventMachine::HttpRequest do
     }
   end
 
+  # should be no different than a POST
+  it "should perform successfull PUT" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').put :body => "data"
+
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 200
+        http.response.should match(/data/)
+        EventMachine.stop
+      }
+    }
+  end
+
   it "should perform successfull POST" do
     EventMachine.run {
       http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').post :body => "data"
@@ -154,13 +183,13 @@ describe EventMachine::HttpRequest do
       http.errback { failed }
       http.callback {
         http.response_header.status.should == 200
-        
+
         http.response.should match(/key1=1&key2\[0\]=2&key2\[1\]=3/)
         EventMachine.stop
       }
     }
   end
-  
+
   it "should perform successfull POST with Ruby Hash/Array as params and with the correct content length" do
     EventMachine.run {
       http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/echo_content_length').post :body => {"key1" => "data1"}
@@ -168,7 +197,7 @@ describe EventMachine::HttpRequest do
       http.errback { failed }
       http.callback {
         http.response_header.status.should == 200
-        
+
         http.response.to_i.should == 10
         EventMachine.stop
       }
@@ -209,6 +238,20 @@ describe EventMachine::HttpRequest do
       http.errback { failed }
       http.callback {
         http.response_header.status.should == 200
+        EventMachine.stop
+      }
+    }
+  end
+
+  it "should send proper OAuth auth header" do
+    EventMachine.run {
+      oauth_header = 'OAuth oauth_nonce="oqwgSYFUD87MHmJJDv7bQqOF2EPnVus7Wkqj5duNByU", b=c, d=e'
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/oauth_auth').get :head => {'authorization' => oauth_header}
+
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 200
+        http.response.should == oauth_header
         EventMachine.stop
       }
     }
@@ -275,7 +318,7 @@ describe EventMachine::HttpRequest do
   it "should optionally pass the response body progressively" do
     EventMachine.run {
       body = ''
-      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').get 
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').get
 
       http.errback { failed }
       http.stream { |chunk| body += chunk }
@@ -418,7 +461,7 @@ describe EventMachine::HttpRequest do
       }
     end
 
-     it "should not override content-type when passing in ruby hash/array for body" do
+    it "should not override content-type when passing in ruby hash/array for body" do
       EventMachine.run {
         http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/echo_content_type').post({
             :body => {:a => :b}, :head => {'content-type' => 'text'}})
@@ -437,34 +480,153 @@ describe EventMachine::HttpRequest do
     EventMachine.run {
       http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/relative-location').get
 
+      http.errback { failed }
+      http.callback {
+        http.response_header['LOCATION'].should == 'http://127.0.0.1:8080/forwarded'
+        EventMachine.stop
+      }
+    }
+  end   
+  
+  it 'should let you pass a block to be called once the client is created' do
+    client = nil
+    EventMachine.run {
+      request = EventMachine::HttpRequest.new('http://127.0.0.1:8080/')
+      http = request.post { |c|
+        c.options[:body] = {:callback_run => 'yes'}
+        client = c
+      }
+      http.errback { failed }
+      http.callback {
+        client.should be_kind_of(EventMachine::HttpClient)
+        http.response_header.status.should == 200
+        http.response.should match(/callback_run=yes/)
+        client.normalize_uri.should == Addressable::URI.parse('http://127.0.0.1:8080/')
+        EventMachine.stop
+      }
+    }
+  end
+
+  it "should retrieve multiple cookies" do
+    EventMachine::MockHttpRequest.register_file('http://www.google.ca:80/', :get, File.join(File.dirname(__FILE__), 'fixtures', 'google.ca'))
+    EventMachine.run {
+
+      http = EventMachine::MockHttpRequest.new('http://www.google.ca/').get
+      http.errback { fail }
+      http.callback {
+        c1 = "PREF=ID=9454187d21c4a6a6:TM=1258403955:LM=1258403955:S=2-mf1n5oV5yAeT9-; expires=Wed, 16-Nov-2011 20:39:15 GMT; path=/; domain=.google.ca"
+        c2 = "NID=28=lvxxVdiBQkCetu_WFaUxLyB7qPlHXS5OdAGYTqge_laVlCKVN8VYYeVBh4bNZiK_Oan2gm8oP9GA-FrZfMPC3ZMHeNq37MG2JH8AIW9LYucU8brOeuggMEbLNNXuiWg4; expires=Tue, 18-May-2010 20:39:15 GMT; path=/; domain=.google.ca; HttpOnly"
+        http.response_header.cookie.should == [c1, c2]
+
+        EventMachine.stop
+      }
+    }
+
+    EventMachine::MockHttpRequest.count('http://www.google.ca:80/', :get).should == 1
+  end
+
+  context "connections via proxy" do
+
+    it "should work with proxy servers" do
+      EventMachine.run {
+
+        http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').get :proxy => {:host => '127.0.0.1', :port => 8082}
+
+        http.errback { p http.inspect; failed }
+        http.callback {
+          http.response_header.status.should == 200
+          http.response.should == 'Hello, World!'
+          EventMachine.stop
+        }
+      }
+    end
+
+    it "should proxy POST data" do
+      EventMachine.run {
+
+        http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').post({
+            :body => "data", :proxy => {:host => '127.0.0.1', :port => 8082}})
+
         http.errback { failed }
         http.callback {
-          http.response_header['LOCATION'].should == 'http://127.0.0.1:8080/forwarded'
+          http.response_header.status.should == 200
+          http.response.should match(/data/)
           EventMachine.stop
         }
       }
+    end
   end
 
-  it "should return an error if the response size exceeds the :max_bytes option" do
-     EventMachine.run {
-        http = EventMachine::HttpRequest.new("http://127.0.0.1:8080/").get(:max_bytes => 3)
-        http.errback { |http|
-          http.errors.should match /Bytes received exceeds limit/
-          EventMachine.stop
-        }
+  context "websocket connection" do
+    # Spec: http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-55
+    #
+    # ws.onopen     = http.callback
+    # ws.onmessage  = http.stream { |msg| }
+    # ws.errback    = no connection
+    #
+
+    it "should invoke errback on failed upgrade" do
+      EventMachine.run {
+        http = EventMachine::HttpRequest.new('ws://127.0.0.1:8080/').get :timeout => 0
+
         http.callback { failed }
-      }
-  end
-
-  it "should return an error if the connection duration exceeds the :max_connection_duration option" do
-     EventMachine.run {
-        http = EventMachine::HttpRequest.new("http://updates.sixapart.com/atom-stream.xml").get(:max_connection_duration => 3)
-        http.errback { |http|
-          http.errors.should match /Max Connection Duration Exceeded/
+        http.errback {
+          http.response_header.status.should == 200
           EventMachine.stop
         }
-        http.callback { failed }
       }
-  end
+    end
 
+    it "should complete websocket handshake and transfer data from client to server and back" do
+      EventMachine.run {
+        MSG = "hello bi-directional data exchange"
+
+        EventMachine::WebSocket.start(:host => "0.0.0.0", :port => 8085) do |ws|
+          ws.onmessage {|msg| ws.send msg}
+        end
+
+        http = EventMachine::HttpRequest.new('ws://127.0.0.1:8085/').get :timeout => 1
+        http.errback { failed }
+        http.callback {
+          http.response_header.status.should == 101
+          http.response_header['CONNECTION'].should match(/Upgrade/)
+          http.response_header['UPGRADE'].should match(/WebSocket/)
+
+          # push should only be invoked after handshake is complete
+          http.send(MSG)
+        }
+        
+        http.stream { |chunk|
+          chunk.should == MSG
+          EventMachine.stop
+        }
+      }
+    end
+
+    it "should split multiple messages from websocket server into separate stream callbacks" do
+      EM.run do
+        messages = %w[1 2]
+        recieved = []
+
+        EventMachine::WebSocket.start(:host => "0.0.0.0", :port => 8085) do |ws|
+          ws.onopen {
+            ws.send messages[0]
+            ws.send messages[1]
+          }
+        end
+
+        EventMachine.add_timer(0.1) do
+          http = EventMachine::HttpRequest.new('ws://127.0.0.1:8085/').get :timeout => 0
+          http.errback { failed }
+          http.callback { http.response_header.status.should == 101 }
+          http.stream {|msg|
+            msg.should == messages[recieved.size]
+            recieved.push msg
+
+            EventMachine.stop if recieved.size == messages.size
+          }
+        end
+      end
+    end
+  end
 end

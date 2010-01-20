@@ -85,7 +85,13 @@ Stallion.saddle :spec do |stable|
 
     elsif stable.request.head?
       stable.response.status = 200
-
+      
+    elsif stable.request.delete?
+      stable.response.status = 200
+      
+    elsif stable.request.put?
+      stable.response.write stable.request.body.read
+      
     elsif stable.request.post?
       if stable.request.path_info == '/echo_content_type'
         stable.response.write stable.request.env["CONTENT_TYPE"]
@@ -121,15 +127,19 @@ Stallion.saddle :spec do |stable|
       stable.response.status = 304
 
     elsif stable.request.env["HTTP_AUTHORIZATION"]
-      auth = "Basic %s" % Base64.encode64(['user', 'pass'].join(':')).chomp
-
-      if auth == stable.request.env["HTTP_AUTHORIZATION"]
+      if stable.request.path_info == '/oauth_auth'
         stable.response.status = 200
-        stable.response.write 'success'
+        stable.response.write stable.request.env["HTTP_AUTHORIZATION"]      
       else
-        stable.response.status = 401
-      end
+        auth = "Basic %s" % Base64.encode64(['user', 'pass'].join(':')).chomp
 
+        if auth == stable.request.env["HTTP_AUTHORIZATION"]
+          stable.response.status = 200
+          stable.response.write 'success'
+        else
+          stable.response.status = 401
+        end
+      end
     elsif stable.request.path_info == '/relative-location'
       stable.response.status = 301
       stable.response["Location"] = '/forwarded'
@@ -146,6 +156,63 @@ Thread.new do
     Stallion.run :Host => '127.0.0.1', :Port => 8080  
   rescue Exception => e
     print e
+  end
+end
+
+#
+# HTTP Proxy server
+#
+Thread.new do
+  server = TCPServer.new('127.0.0.1', 8082)
+  loop do
+    session = server.accept
+    request = ""
+    while (data = session.gets) != "\r\n"
+      request << data
+    end
+    parts = request.split("\r\n")
+    method, destination, http_version = parts.first.split(' ')
+    if method == 'CONNECT'
+      target_host, target_port = destination.split(':')
+      client = TCPSocket.open(target_host, target_port)
+      session.write "HTTP/1.1 200 Connection established\r\nProxy-agent: Whatever\r\n\r\n"
+      session.flush
+
+      content_length = -1
+      verb = ""
+      req = ""
+
+      while data = session.gets
+        if request = data.match(/(\w+).*HTTP\/1\.1/)
+          verb = request[1]
+        end
+
+        if post = data.match(/Content-Length: (\d+)/)
+          content_length = post[1].to_i
+        end
+
+        req += data
+
+        # read POST data
+        if data == "\r\n" and verb == "POST"
+          req += session.read(content_length)
+        end
+
+        if data == "\r\n"
+          client.write req
+          client.flush
+          client.close_write
+          break
+        end
+      end
+      
+      while data = client.gets
+        session.write data
+      end
+      session.flush
+      client.close
+    end
+    session.close
   end
 end
 
