@@ -216,7 +216,7 @@ module EventMachine
         # exchange
       else
         if @options[:max_connection_duration] 
-          EM.add_timer(@options[:max_connection_duration]) {
+          @max_duration_timer = EM.add_timer(@options[:max_connection_duration]) {
             @aborted = true
             on_error("Max Connection Duration Exceeded (#{@options[:max_connection_duration]}s.)")
           }
@@ -376,6 +376,7 @@ module EventMachine
     end
 
     def unbind
+      @max_duration_timer.cancel if @max_duration_timer
       if @state == :finished || (
           @state == :body && 
           @bytes_remaining.nil? && 
