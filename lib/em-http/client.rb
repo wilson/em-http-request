@@ -189,6 +189,7 @@ module EventMachine
     attr_reader   :response, :response_header, :errors
 
     def post_init
+      @max_duration_timer = nil
       @parser = HttpClientParser.new
       @data = EventMachine::Buffer.new
       @chunk_header = HttpChunkHeader.new
@@ -376,7 +377,7 @@ module EventMachine
     end
 
     def unbind
-      @max_duration_timer.cancel if @max_duration_timer
+      EM.cancel_timer(@max_duration_timer) if @max_duration_timer
       if @state == :finished || (
           @state == :body && 
           @bytes_remaining.nil? && 
