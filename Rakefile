@@ -86,16 +86,16 @@ CLEAN.include ['ext/buffer/Makefile', 'lib/em_buffer.*', 'lib/http11_client.*']
 begin
   require 'jeweler'
   Jeweler::Tasks.new do |gemspec|
-    gemspec.name = "em-http-request"
+    gemspec.name = "astro-em-http-request"
     gemspec.summary = "EventMachine based, async HTTP Request interface"
     gemspec.description = gemspec.summary
     gemspec.email = "ilya@igvita.com"
     gemspec.homepage = "http://github.com/igrigorik/em-http-request"
-    gemspec.authors = ["Ilya Grigorik"]
+    gemspec.authors = ["Ilya Grigorik", "Stephan Maka", "Julien Genestoux"]
     gemspec.extensions = ["ext/buffer/extconf.rb" , "ext/http11_client/extconf.rb"]
     gemspec.add_dependency('eventmachine', '>= 0.12.9')
     gemspec.add_dependency('addressable', '>= 2.0.0')
-    gemspec.rubyforge_project = "em-http-request"
+    gemspec.rubyforge_project = "astro-em-http-request"
     gemspec.files = FileList[`git ls-files`.split]
   end
   
