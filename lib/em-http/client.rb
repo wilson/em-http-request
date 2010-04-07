@@ -84,7 +84,7 @@ module EventMachine
     # Escapes a URI.
     def escape(s)
       s.to_s.gsub(/([^ a-zA-Z0-9_.-]+)/n) {
-        '%'+$1.unpack('H2'*$1.size).join('%').upcase
+        '%'+$1.unpack('H2'*$1.bytesize).join('%').upcase
       }.tr(' ', '+')
     end
 
@@ -104,7 +104,11 @@ module EventMachine
     # you include port 80 then further redirects will tack on the :80 which is
     # annoying.
     def encode_host
-      @uri.host + (@uri.port != 80 ? ":#{@uri.port}" : "")
+      if @uri.port == 80 || @uri.port == 443
+        return @uri.host
+      else
+        @uri.host + ":#{@uri.port}"
+      end
     end
 
     def encode_request(method, path, query, uri_query)
@@ -313,7 +317,7 @@ module EventMachine
         
       else
         # Set the Content-Length if body is given
-        head['content-length'] =  body.length if body
+        head['content-length'] =  body.bytesize if body
 
         # Set the cookie header if provided
         if cookie = head.delete('cookie')
