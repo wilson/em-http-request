@@ -477,9 +477,9 @@ module EventMachine
       # correct location header - some servers will incorrectly give a relative URI
       if @response_header.location
         begin
-          location = Addressable::URI.parse @response_header.location
+          location = URI.parse @response_header.location
           if location.relative?
-            location = (@uri.join location).to_s
+            location = (@uri.merge location).to_s
             @response_header[LOCATION] = location
           end
         rescue

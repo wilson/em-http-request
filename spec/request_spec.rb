@@ -501,7 +501,7 @@ describe EventMachine::HttpRequest do
         client.should be_kind_of(EventMachine::HttpClient)
         http.response_header.status.should == 200
         http.response.should match(/callback_run=yes/)
-        client.normalize_uri.should == Addressable::URI.parse('http://127.0.0.1:8080/')
+        client.normalize_uri.should == URI.parse('http://127.0.0.1:8080/')
         EventMachine.stop
       }
     }

@@ -1,5 +1,5 @@
 require 'base64'
-require 'addressable/uri'
+require 'uri'
 
 module EventMachine
 
@@ -28,7 +28,7 @@ module EventMachine
 
     def initialize(host, headers = {})
       @headers = headers
-      @uri = host.kind_of?(Addressable::URI) ? host : Addressable::URI::parse(host)
+      @uri = host.kind_of?(URI) ? host : URI::parse(host)
     end
 
     # Send an HTTP request and consume the response. Supported options:
@@ -70,7 +70,7 @@ module EventMachine
       # default connect & inactivity timeouts        
       @options[:timeout] = 10 if not @options[:timeout]  
 
-      # Make sure the ports are set as Addressable::URI doesn't
+      # Make sure the ports are set as URI doesn't
       # set the port if it isn't there
       if @uri.scheme == "https"
         @uri.port ||= 443
