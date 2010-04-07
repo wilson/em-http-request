@@ -95,7 +95,6 @@ begin
     gemspec.required_ruby_version = ">= 1.8.7"
     gemspec.extensions = ["ext/buffer/extconf.rb" , "ext/http11_client/extconf.rb"]
     gemspec.add_dependency('eventmachine', '>= 0.12.9')
-    gemspec.add_dependency('addressable', '>= 2.0.0')
     gemspec.rubyforge_project = "astro-em-http-request"
     gemspec.files = FileList[`git ls-files`.split]
   end
