@@ -23,12 +23,12 @@ module EventMachine
     
     # E-Tag
     def etag
-      self["ETag"]
+      self[HttpClient::ETAG]
     end
     
     def last_modified
-      time = self["Last-Modified"]
-      Time.parse(time) if time
+      time = self[HttpClient::LAST_MODIFIED]
+      time ? Time.parse(time) : nil
     end
 
     # HTTP response status as an integer
@@ -180,14 +180,16 @@ module EventMachine
     include EventMachine::Deferrable
     include HttpEncoding
 
-    TRANSFER_ENCODING="TRANSFER_ENCODING"
-    CONTENT_ENCODING="CONTENT_ENCODING"
-    CONTENT_LENGTH="CONTENT_LENGTH"
-    KEEP_ALIVE="CONNECTION"
-    SET_COOKIE="SET_COOKIE"
-    LOCATION="LOCATION"
-    HOST="HOST"
-    CRLF="\r\n"
+    TRANSFER_ENCODING="TRANSFER_ENCODING".freeze
+    CONTENT_ENCODING="CONTENT_ENCODING".freeze
+    CONTENT_LENGTH="CONTENT_LENGTH".freeze
+    KEEP_ALIVE="CONNECTION".freeze
+    SET_COOKIE="SET_COOKIE".freeze
+    LOCATION="LOCATION".freeze
+    HOST="HOST".freeze
+    LAST_MODIFIED="LAST_MODIFIED".freeze
+    ETAG="ETAG".freeze
+    CRLF="\r\n".freeze
 
     attr_accessor :method, :options, :uri
     attr_reader   :response_header, :errors
