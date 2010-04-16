@@ -35,6 +35,44 @@ static VALUE rb_hash_lookup(VALUE hash, VALUE key)
 }
 #endif
 
+/* Expects upper-case, client_http_field() already does that */
+static int header_field_needed(VALUE f)
+{
+  if (RSTRING_LEN(f) < 4)  /* Minimum length of one header field */
+    return 0;
+
+  if (strncmp(RSTRING_PTR(f), "CON", 3) == 0)
+  {
+    if (strncmp(RSTRING_PTR(f), "CONTENT_TYPE", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "CONTENT_ENCODING", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "CONTENT_LENGTH", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "CONNECTION", RSTRING_LEN(f)) == 0)
+      return 1;
+    return 0;
+  }
+  else
+  {
+    if (strncmp(RSTRING_PTR(f), "TRANSFER_ENCODING", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "SET_COOKIE", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "LOCATION", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "HOST", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "LAST_MODIFIED", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "ETAG", RSTRING_LEN(f)) == 0)
+      return 1;
+    if (strncmp(RSTRING_PTR(f), "UPGRADE", RSTRING_LEN(f)) == 0)
+      return 1;
+    return 0;
+  }
+}
+
 void client_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen)
 {
   char *ch, *end;
@@ -56,8 +94,10 @@ void client_http_field(void *data, const char *field, size_t flen, const char *v
     }
   }
 
-  el = rb_hash_lookup(req, f);
-  switch(TYPE(el)) {
+  if (header_field_needed(f))
+  {
+    el = rb_hash_lookup(req, f);
+    switch(TYPE(el)) {
     case T_ARRAY:
       rb_ary_push(el, v);
       break;
@@ -67,6 +107,7 @@ void client_http_field(void *data, const char *field, size_t flen, const char *v
     default:
       rb_hash_aset(req, f, v);
       break;
+    }
   }
 }
 
