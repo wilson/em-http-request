@@ -190,7 +190,7 @@ module EventMachine
     CRLF="\r\n"
 
     attr_accessor :method, :options, :uri
-    attr_reader   :response, :response_header, :errors
+    attr_reader   :response_header, :errors
 
     def post_init
       @max_duration_timer = nil
@@ -199,13 +199,18 @@ module EventMachine
       @chunk_header = HttpChunkHeader.new
       @response_header = HttpResponseHeader.new
       @parser_nbytes = 0
-      @response = ''
+      @response = nil
       @errors = ''
       @content_decoder = nil
       @stream = nil
       @state = :response_header
       @bytes_received = 0
       @options = {}
+    end
+
+    # Simple getter, because @response is expected to be a String
+    def response
+      @response || ''
     end
 
     # start HTTP request once we establish connection to host
@@ -376,6 +381,7 @@ module EventMachine
       if @stream
         @stream.call(data)
       else
+        @response ||= ''
         @response << data
       end
     end
