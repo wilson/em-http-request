@@ -20,12 +20,12 @@ module EventMachine
 
     # The status code (as a string!)
     attr_accessor :http_status
-    
+
     # E-Tag
     def etag
       self[HttpClient::ETAG]
     end
-    
+
     def last_modified
       time = self[HttpClient::LAST_MODIFIED]
       time ? Time.parse(time) : nil
@@ -39,7 +39,7 @@ module EventMachine
     # Length of content as an integer, or nil if chunked/unspecified
     def content_length
       @content_length ||= ((s = self[HttpClient::CONTENT_LENGTH]) &&
-          (s =~ /^(\d+)$/)) ? $1.to_i : nil
+                           (s =~ /^(\d+)$/)) ? $1.to_i : nil
     end
 
     # Cookie header from the server
@@ -151,7 +151,7 @@ module EventMachine
         FIELD_ENCODING % [k, ["Basic", Base64.encode64(v.join(":")).chomp].join(" ")]
       else
         encode_field(k,v)
-      end      
+      end
     end
 
     def encode_headers(head)
@@ -159,10 +159,10 @@ module EventMachine
         # Munge keys from foo-bar-baz to Foo-Bar-Baz
         key = key.split('-').map { |k| k.to_s.capitalize }.join('-')
         result << case key
-        when 'Authorization', 'Proxy-authorization'          
-          encode_auth(key, value)
-        else
-          encode_field(key, value)
+          when 'Authorization', 'Proxy-authorization'
+            encode_auth(key, value)
+          else
+            encode_field(key, value)
         end
       end
     end
@@ -192,7 +192,7 @@ module EventMachine
     CRLF="\r\n".freeze
 
     attr_accessor :method, :options, :uri
-    attr_reader   :response_header, :errors
+    attr_reader   :response, :response_header, :error, :redirects, :last_effective_url
 
     def post_init
       @max_duration_timer = nil
@@ -202,9 +202,13 @@ module EventMachine
       @response_header = HttpResponseHeader.new
       @parser_nbytes = 0
       @response = nil
-      @errors = ''
+      @redirects = 0
+      @errors = '' # both this and @error?
+      @error = ''
+      @last_effective_url = nil
       @content_decoder = nil
       @stream = nil
+      @disconnect = nil
       @state = :response_header
       @bytes_received = 0
       @options = {}
@@ -216,13 +220,13 @@ module EventMachine
     end
 
     # start HTTP request once we establish connection to host
-    def connection_completed              
+    def connection_completed
       # if connecting to proxy, then first negotiate the connection
-      # to intermediate server and wait for 200 response 
-      if @options[:proxy] and @state == :response_header 
+      # to intermediate server and wait for 200 response
+      if @options[:proxy] and @state == :response_header
         @state = :response_proxy
         send_request_header
-        
+
         # if connecting via proxy, then state will be :proxy_connected,
         # indicating successful tunnel. from here, initiate normal http
         # exchange
@@ -234,14 +238,13 @@ module EventMachine
           }
         end
         @state = :response_header
-                      
         ssl = @options[:tls] || @options[:ssl] || {}
         start_tls(ssl) if @uri.scheme == "https" #or @uri.port == 443 # A user might not want https even on port 443.
         send_request_header
         send_request_body
       end
     end
-    
+
     # request is done, invoke the callback
     def on_request_complete
       begin
@@ -249,13 +252,14 @@ module EventMachine
       rescue HttpDecoders::DecoderError
         on_error "Content-decoder error"
       end
-      unbind
+
+      close_connection
     end
-    
+
     # request failed, invoke errback
     def on_error(msg, dns_error = false)
-      @errors = msg
-      
+      @error = msg
+
       # no connection signature on DNS failures
       # fail the connection directly
       dns_error == true ? fail(self) : unbind
@@ -264,6 +268,11 @@ module EventMachine
     # assign a stream processing block
     def stream(&blk)
       @stream = blk
+    end
+
+    # assign disconnect callback for websocket
+    def disconnect(&blk)
+      @disconnect = blk
     end
 
     # raw data push from the client (WebSocket) should
@@ -289,23 +298,13 @@ module EventMachine
         end
       end
     end
-    
-    def normalize_uri
-      @normalized_uri ||= begin
-        uri = @uri.dup
-        encoded_query = encode_query(@uri.path, @options[:query], @uri.query)
-        path, query = encoded_query.split("?", 2)
-        uri.query = query unless encoded_query.empty?
-        uri.path  = path
-        uri
-      end
-    end
 
     def websocket?; @uri.scheme == 'ws'; end
-    
+
     def send_request_header
       query   = @options[:query]
       head    = @options[:head] ? munge_header_keys(@options[:head]) : {}
+      file    = @options[:file]
       body    = normalize_body
       request_header = nil
 
@@ -316,13 +315,16 @@ module EventMachine
         head = proxy[:head] ? munge_header_keys(proxy[:head]) : {}
         head['proxy-authorization'] = proxy[:authorization] if proxy[:authorization]
         request_header = HTTP_REQUEST_HEADER % ['CONNECT', "#{@uri.host}:#{@uri.port}"]
-        
+
       elsif websocket?
         head['upgrade'] = 'WebSocket'
         head['connection'] = 'Upgrade'
         head['origin'] = @options[:origin] || @uri.host
-        
+
       else
+        # Set the Content-Length if file is given
+        head['content-length'] = File.size(file) if file
+
         # Set the Content-Length if body is given
         head['content-length'] =  body.bytesize if body
 
@@ -343,6 +345,9 @@ module EventMachine
       # Set the User-Agent if it hasn't been specified
       head['user-agent'] ||= "EventMachine HttpClient"
 
+      # Record last seen URL
+      @last_effective_url = @uri
+
       # Build the request headers
       request_header ||= encode_request(@method, @uri.path, query, @uri.query)
       request_header << encode_headers(head)
@@ -351,9 +356,13 @@ module EventMachine
     end
 
     def send_request_body
-      return unless @options[:body]
-      body = normalize_body
-      send_data body
+      if @options[:body]
+        body = normalize_body
+        send_data body
+        return
+      elsif @options[:file]
+        stream_file_data @options[:file], :http_chunks => false
+      end
     end
 
     def receive_data(data)
@@ -390,17 +399,31 @@ module EventMachine
 
     def unbind
       EM.cancel_timer(@max_duration_timer) if @max_duration_timer
-      if @state == :finished || (
-          @state == :body && 
-          @bytes_remaining.nil? && 
-          (!@options[:max_bytes] or @bytes_received < @options[:max_bytes]) &&
-          (!@options[:max_connection_duration] or !@aborted)
-        )
-        succeed(self) 
+
+      if @last_effective_url != @uri and @redirects < @options[:redirects]
+        # update uri to redirect location if we're allowed to traverse deeper
+        @uri = @last_effective_url
+
+        # keep track of the depth of requests we made in this session
+        @redirects += 1
+
+        # swap current connection and reassign current handler
+        req = HttpOptions.new(@method, @uri, @options)
+        reconnect(req.host, req.port)
+
+        @response_header = HttpResponseHeader.new
+        @state = :response_header
+        @data.clear
       else
-        fail(self)
+        if @state == :finished || (@state == :body && @bytes_remaining.nil? &&
+            (!@options[:max_bytes] or @bytes_received < @options[:max_bytes]) &&
+            (!@options[:max_connection_duration] or !@aborted))
+          succeed(self)
+        else
+          @disconnect.call(self) if @state == :websocket and @disconnect
+          fail(self)
+        end
       end
-      close_connection
     end
 
     #
@@ -409,25 +432,25 @@ module EventMachine
 
     def dispatch
       while case @state
-        when :response_proxy
-          parse_response_proxy
-        when :response_header
-          parse_response_header
-        when :chunk_header
-          parse_chunk_header
-        when :chunk_body
-          process_chunk_body
-        when :chunk_footer
-          process_chunk_footer
-        when :response_footer
-          process_response_footer
-        when :body
-          process_body
-        when :websocket
-          process_websocket
-        when :finished, :invalid
-          break
-        else raise RuntimeError, "invalid state: #{@state}"
+          when :response_proxy
+            parse_response_header
+          when :response_header
+            parse_response_header
+          when :chunk_header
+            parse_chunk_header
+          when :chunk_body
+            process_chunk_body
+          when :chunk_footer
+            process_chunk_footer
+          when :response_footer
+            process_response_footer
+          when :body
+            process_body
+          when :websocket
+            process_websocket
+          when :finished, :invalid
+            break
+          else raise RuntimeError, "invalid state: #{@state}"
         end
       end
     end
@@ -450,28 +473,6 @@ module EventMachine
 
       true
     end
-    
-    # TODO: refactor with parse_response_header
-    def parse_response_proxy
-      return false unless parse_header(@response_header)
-
-      unless @response_header.http_status and @response_header.http_reason
-        @state = :invalid
-        on_error "no HTTP response"
-        return false
-      end
-          
-      # when a successfull tunnel is established, the proxy responds with a
-      # 200 response code. from here, the tunnel is transparent.
-      if @response_header.http_status.to_i == 200
-        @response_header = HttpResponseHeader.new
-        connection_completed
-      else
-        @state = :invalid
-        on_error "proxy not accessible"
-        return false
-      end
-    end
 
     def parse_response_header
       return false unless parse_header(@response_header)
@@ -482,14 +483,31 @@ module EventMachine
         return false
       end
 
+      if @state == :response_proxy
+        # when a successfull tunnel is established, the proxy responds with a
+        # 200 response code. from here, the tunnel is transparent.
+        if @response_header.http_status.to_i == 200
+          @response_header = HttpResponseHeader.new
+          connection_completed
+          return true
+        else
+          @state = :invalid
+          on_error "proxy not accessible"
+          return false
+        end
+      end
+
       # correct location header - some servers will incorrectly give a relative URI
       if @response_header.location
         begin
           location = URI.parse @response_header.location
           if location.relative?
-            location = (@uri.merge location).to_s
-            @response_header[LOCATION] = location
+            location = @uri.merge(location.to_s)
+            @response_header[LOCATION] = location.to_s
           end
+
+          # store last url on any sign of redirect
+          @last_effective_url = location
         rescue
           on_error "Location header format error"
           return false
@@ -499,7 +517,7 @@ module EventMachine
       # shortcircuit on HEAD requests
       if @method == "HEAD"
         @state = :finished
-        on_request_complete
+        unbind
       end
 
       if websocket?
@@ -509,7 +527,7 @@ module EventMachine
         else
           fail "websocket handshake failed"
         end
-       
+
       elsif @response_header.chunked_encoding?
         @state = :chunk_header
       elsif @response_header.content_length
@@ -527,7 +545,7 @@ module EventMachine
           on_error "Content-decoder error"
         end
       end
-      
+
       true
     end
 
@@ -641,7 +659,7 @@ module EventMachine
       end
 
       # store remainder if message boundary has not yet
-      # been recieved
+      # been received
       @data << buffer if not buffer.empty?
 
       false

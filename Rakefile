@@ -35,7 +35,7 @@ task :ragel do
 end
 
 task :spec do
-	sh 'spec spec/*_spec.rb'
+  sh 'spec spec/*_spec.rb'
 end
 
 def make(makedir)
@@ -55,8 +55,8 @@ def setup_extension(dir, extension)
     "#{ext}/extconf.rb",
     "#{ext}/Makefile",
     "lib"
-  ] 
-  
+  ]
+
   task "lib" do
     directory "lib"
   end
@@ -86,7 +86,7 @@ CLEAN.include ['ext/buffer/Makefile', 'lib/em_buffer.*', 'lib/http11_client.*']
 begin
   require 'jeweler'
   Jeweler::Tasks.new do |gemspec|
-    gemspec.name = "astro-em-http-request"
+    gemspec.name = "em-http-request"
     gemspec.summary = "EventMachine based, async HTTP Request interface"
     gemspec.description = gemspec.summary
     gemspec.email = "ilya@igvita.com"
@@ -98,7 +98,7 @@ begin
     gemspec.rubyforge_project = "astro-em-http-request"
     gemspec.files = FileList[`git ls-files`.split]
   end
-  
+
   Jeweler::GemcutterTasks.new
 rescue LoadError
   puts "Jeweler not available. Install it with: sudo gem install technicalpickles-jeweler -s http://gems.github.com"

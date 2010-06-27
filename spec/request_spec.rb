@@ -11,6 +11,7 @@ describe EventMachine::HttpRequest do
 
   it "should fail GET on DNS timeout" do
     EventMachine.run {
+      EventMachine.heartbeat_interval = 0.1
       http = EventMachine::HttpRequest.new('http://127.1.1.1/').get :timeout => 1
       http.callback { failed }
       http.errback {
@@ -22,11 +23,12 @@ describe EventMachine::HttpRequest do
 
   it "should fail GET on invalid host" do
     EventMachine.run {
+      EventMachine.heartbeat_interval = 0.1
       http = EventMachine::HttpRequest.new('http://somethinglocal/').get :timeout => 1
       http.callback { failed }
       http.errback {
         http.response_header.status.should == 0
-        http.errors.should match(/unable to resolve server address/)
+        http.error.should match(/unable to resolve server address/)
         EventMachine.stop
       }
     }
@@ -74,7 +76,7 @@ describe EventMachine::HttpRequest do
       uri = URI.parse('http://127.0.0.1:8080/')
       http = EventMachine::HttpRequest.new(uri).head
 
-      http.errback { failed }
+      http.errback { p http; failed }
       http.callback {
         http.response_header.status.should == 200
         http.response.should == ""
@@ -302,16 +304,60 @@ describe EventMachine::HttpRequest do
     }
   end
 
-  it "should timeout after 10 seconds" do
+  it "should timeout after 1 second" do
     EventMachine.run {
       t = Time.now.to_i
+      EventMachine.heartbeat_interval = 0.1
       http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/timeout').get :timeout => 1
 
       http.errback {
-        (Time.now.to_i - t).should >= 2
+        (Time.now.to_i - t).should <= 5
         EventMachine.stop
       }
       http.callback { failed }
+    }
+  end
+
+  it "should report last_effective_url" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').get
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 200
+        http.last_effective_url.to_s.should == 'http://127.0.0.1:8080/'
+
+        EM.stop
+      }
+    }
+  end
+
+  it "should follow location redirects" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/redirect').get :redirects => 1
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 200
+        http.response_header["CONTENT_ENCODING"].should == "gzip"
+        http.response.should == "compressed"
+        http.last_effective_url.to_s.should == 'http://127.0.0.1:8080/gzip'
+        http.redirects.should == 1
+
+        EM.stop
+      }
+    }
+  end
+
+  it "should default to 0 redirects" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/redirect').get
+      http.errback { failed }
+      http.callback {
+        http.response_header.status.should == 301
+        http.last_effective_url.to_s.should == 'http://127.0.0.1:8080/gzip'
+        http.redirects.should == 0
+
+        EM.stop
+      }
     }
   end
 
@@ -486,8 +532,20 @@ describe EventMachine::HttpRequest do
         EventMachine.stop
       }
     }
-  end   
-  
+  end
+
+  it "should stream a file off disk" do
+    EventMachine.run {
+      http = EventMachine::HttpRequest.new('http://127.0.0.1:8080/').post :file => 'spec/fixtures/google.ca'
+
+      http.errback { failed }
+      http.callback {
+        http.response.should match('google')
+        EventMachine.stop
+      }
+    }
+  end
+
   it 'should let you pass a block to be called once the client is created' do
     client = nil
     EventMachine.run {
@@ -501,7 +559,6 @@ describe EventMachine::HttpRequest do
         client.should be_kind_of(EventMachine::HttpClient)
         http.response_header.status.should == 200
         http.response.should match(/callback_run=yes/)
-        client.normalize_uri.should == URI.parse('http://127.0.0.1:8080/')
         EventMachine.stop
       }
     }
@@ -595,7 +652,7 @@ describe EventMachine::HttpRequest do
           # push should only be invoked after handshake is complete
           http.send(MSG)
         }
-        
+
         http.stream { |chunk|
           chunk.should == MSG
           EventMachine.stop
